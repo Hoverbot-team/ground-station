@@ -41,6 +41,7 @@ rPing pong;
 //enums
 //vars
 bool PingSent = false;
+unsigned long pingSentTime = 0;
 //functions
 void setup() {
   Serial.begin(115200);
@@ -71,20 +72,22 @@ void loop() {
   RecieverData.Rssi = radio.getRSSI();
   Serial.write((uint8_t*)&RecieverData, sizeof(RecieverData));
   if (!PingSent) {
+    ping.pingID = random(255);  // unique ping ID
     radio.transmit((uint8_t*)&ping, sizeof(ping));
     PingSent = true;
+    pingSentTime = millis();  // track for timeout
   } else {
-    int state1 = radio.readData((uint8_t*)&pong, sizeof(pong));
-    if (state1 == RADIOLIB_ERR_NONE) {
-      RecieverData.isConnected = true;
-    } else if (state1 == RADIOLIB_ERR_RX_TIMEOUT) {
-      RecieverData.isConnected = false;
-      if (memcmp(&ping, &pong, sizeof(rPing)) == 0) {
+    int state = radio.readData((uint8_t*)&pong, sizeof(pong));
+
+    if (state == RADIOLIB_ERR_NONE) {
+      // check if pong matches the ping ID
+      if (pong.pingID == ping.pingID) {
         RecieverData.isConnected = true;
+        PingSent = false;  // ready to send next ping
       }
-      if (RecieverData.isConnected = true) {
-        PingSent = false;
-      }
+    } else if (millis() - pingSentTime > 2000) {  // 2-second timeout
+      RecieverData.isConnected = false;
+      PingSent = false;  // retry next loop
     }
   }
 }
